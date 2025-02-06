@@ -104,21 +104,27 @@ describe('aaveActionUtil', () => {
 
             expect(supplyTxReceipt.transactionHash).toBeDefined();
 
-            const { withDrawTxs } = await createWithdrawTxData(provider, {
+            // estimateGas error if withdraw amount incorrect
+            // TODO this amount to be parsed as wei
+            const { withDrawTxDatas } = await createWithdrawTxData(provider, {
                 market,
-                amount,
+                amount: '0.01',
                 USER,
                 ASSET
             });
 
-            console.log('withDrawTxs', withDrawTxs);
+            const withdrawTxHash = await wallet.sendTransaction({
+                to: withDrawTxDatas?.[0].to as Address,
+                data: withDrawTxDatas?.[0].data as Hex,
 
-            const receipt = await withDrawTxs?.[0].tx();
-            console.log(receipt)
+            })
+            console.log(withdrawTxHash);
+
+
+            console.log('withdraw txn hash', supplyTxReceipt.transactionHash)
+            expect(withdrawTxHash).toBeDefined();
 
         })
-
-
 
 
         test.skip('#createSupplyTxData work with cdp wallet', async () => {
@@ -175,14 +181,25 @@ describe('aaveActionUtil', () => {
 
             expect(supplyTxHash).toBeDefined();
 
-            const { withDrawTxs } = await createWithdrawTxData(provider, {
+            const { withDrawTxDatas } = await createWithdrawTxData(provider, {
                 market,
-                amount,
+                amount: '1',
                 USER,
                 ASSET
             });
 
-            console.log('ressults', withDrawTxs)
+            console.log('withDrawTxDatas', withDrawTxDatas)
+
+            const withdrawTxHash = await cdpWalletProvider.sendTransaction({
+                to: txData.to as Address,
+                data: txData.data as Hex,
+
+            })
+            console.log(withdrawTxHash);
+            await cdpWalletProvider.waitForTransactionReceipt(withdrawTxHash);
+
+
+
         })
 
     })

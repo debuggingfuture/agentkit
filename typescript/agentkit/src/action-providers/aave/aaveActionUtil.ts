@@ -110,9 +110,13 @@ export const createWithdrawTxData = async (provider: providers.Provider, params:
     // onBehalfOf,
   });
 
+  // TODO fix this always estimateGas which is unstable
+
+  const withDrawTxData = await withDrawTxs?.[0].tx();
+
   return {
     pool,
-    withDrawTxs
+    withDrawTxDatas: [withDrawTxData]
   };
 
 }

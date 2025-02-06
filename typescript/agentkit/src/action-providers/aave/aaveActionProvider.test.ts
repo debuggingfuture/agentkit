@@ -8,9 +8,11 @@ import { Address, Hex } from "viem";
 
 jest.setTimeout(60_000);
 
+const cdpWalletData = process.env.CDP_WALLET_DATA || '{}';
+
 describe('SupplySchema', () => {
 
-  const cdpWalletData = process.env.CDP_WALLET_DATA || '{}';
+
   // it("should successfully parse valid input", () => {
   //     const validInput = {
   //       amount: MOCK_AMOUNT,
@@ -219,7 +221,7 @@ describe('aave utilites learning test', () => {
 
 
 
-    it.only('with cdp provider', async () => {
+    it.skip('with cdp provider', async () => {
       // TODO need stable wallet
       const provider = await CdpWalletProvider.configureWithWallet({
         // Optional: Provide API key details. If not provided, it will attempt to configure from JSON.
