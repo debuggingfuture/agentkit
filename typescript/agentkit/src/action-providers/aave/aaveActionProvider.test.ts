@@ -1,279 +1,209 @@
-import { aaveActionProvider } from "./aaveActionProvider";
-import { ethers, Wallet } from 'ethers-v5';
+import { AaveActionProvider, aaveActionProvider } from "./aaveActionProvider";
+import { ethers, providers, Wallet } from 'ethers-v5';
 import { CdpWalletProvider, EvmWalletProvider } from "../../wallet-providers";
 import { ActionBundle, FaucetService, PoolBundle } from '@aave/contract-helpers';
 import * as markets from '@bgd-labs/aave-address-book';
 import { Address, Hex } from "viem";
-// import { createSupplyTxData, MarketConfig } from "./aaveActionUtil";
+import { AAVEV3_BASE_SEPOLIA_MARKET_CONFIG } from "./markets";
+import { SupplySchema, WithdrawSchema } from "./schemas";
+import { approve } from "../../utils";
+import { createSupplyTxData } from "./aaveActionUtil";
 
-jest.setTimeout(60_000);
+import { Block, BlockTag, Filter, FilterByBlockHash, Listener, Log, Provider, TransactionReceipt, TransactionRequest, TransactionResponse } from "@ethersproject/abstract-provider";
+
+jest.mock("../../utils");
+const mockApprove = approve as jest.MockedFunction<typeof approve>;
 
 const cdpWalletData = process.env.CDP_WALLET_DATA || '{}';
 
 describe('SupplySchema', () => {
 
+  it("should successfully parse valid input", () => {
 
-  // it("should successfully parse valid input", () => {
-  //     const validInput = {
-  //       amount: MOCK_AMOUNT,
-  //       contractAddress: MOCK_CONTRACT_ADDRESS,
-  //       destination: MOCK_DESTINATION,
-  //     };
+    const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
+    const validInput = {
+      amount: '1',
+      underlyingAddress: markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING,
+    };
 
-  //     const result = TransferSchema.safeParse(validInput);
+    const result = SupplySchema.safeParse(validInput);
 
-  //     expect(result.success).toBe(true);
-  //     expect(result.data).toEqual(validInput);
-  //   });
-
-  //   it("should fail parsing empty input", () => {
-  //     const emptyInput = {};
-  //     const result = TransferSchema.safeParse(emptyInput);
-
-  //     expect(result.success).toBe(false);
-  //   });
-});
-
-// Use aave Faucet to get assets on testnet
-// Sepolia https://app.aave.com/faucet/?marketName=proto_sepolia_v3
-// Base Sepolia (use circle for USDC) https://faucet.circle.com/
-// https://sepolia.basescan.org/token/0x036cbd53842c5426634e7929541ec2318f3dcf7e
-// cross-check with aave test case
-// https://github.com/aave/aave-utilities/blob/master/packages/contract-helpers/src/v3-pool-contract-bundle/pool-bundle.test.ts#L109
-describe('aave utilites learning test', () => {
-
-  let alchemyConfig = {
-    apiKey: ''
-  };
-
-  // 0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526
-  const privateKey = process.env.PRIVATE_KEY || '';
-  const USER = '0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526';
-
-  beforeAll(() => {
-    alchemyConfig.apiKey = process.env.ALCHEMY_API_KEY || 'tQhwxQjcpEdTJ0QhTCQmpvtlUlppXO6s';
-
-  })
-
-
-  // transaction failed [ See: https://links.ethers.org/v5-errors-CALL_EXCEPTION ] (transactionHash="0x882aabeeb96734c2afcbcc9f131025f7d0adb447ebc72b6129e45e1aea091de0", transaction={"type":2,"chainId":11155111,"nonce":3,"maxPriorityFeePerGas":{"type":"BigNumber","hex":"0x59682f00"},"maxFeePerGas":{"type":"BigNumber","hex":"0x0a858acb9c"},"gasPrice":null,"gasLimit":{"type":"BigNumber","hex":"0x0493e0"},"to":"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951","value":{"type":"BigNumber","hex":"0x00"},"data":"0x617ba03700000000000000000000000094a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c800000000000000000000000000000000000000000000000000000000000000010000000000000000000000004a9b1ecd1297493b4eff34652710bd1ce52c65260000000000000000000000000000000000000000000000000000000000000000","accessList":[],"hash":"0x882aabeeb96734c2afcbcc9f131025f7d0adb447ebc72b6129e45e1aea091de0","v":0,"r":"0x65e2c1f42d19b7b2aed9ec0ea106e3ed619acb2650f894f77960e55717f813e8","s":"0x18cf7604a6d5e7a9d583e308d67d90afdd73f6a055ce307e421027c89dbec840","from":"0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526","confirmations":0}, receipt={"to":"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951","from":"0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526","contractAddress":null,"transactionIndex":26,"gasUsed":{"type":"BigNumber","hex":"0x01efd5"},"logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","blockHash":"0xd5f42469d0edcac50b66482b0102a09d3be0e330d96c873589fe80a5278d1d3c","transactionHash":"0x882aabeeb96734c2afcbcc9f131025f7d0adb447ebc72b6129e45e1aea091de0","logs":[],"blockNumber":7646807,"confirmations":1,"cumulativeGasUsed":{"type":"BigNumber","hex":"0x27f98a"},"effectiveGasPrice":{"type":"BigNumber","hex":"0x0596074bf6"},"status":0,"type":2,"byzantium":true}, code=CALL_EXCEPTION, version=providers/5.7.2)
-
-  //   it.only('should supply USDC on L1', async ()=>{
-
-  //     const provider = new ethers.providers.JsonRpcProvider(
-  //       "https://eth-sepolia.g.alchemy.com/v2/tQhwxQjcpEdTJ0QhTCQmpvtlUlppXO6s"
-  //       );
-
-  // const faucetAddress = '0xFaEc9cDC3Ef75713b48f46057B98BA04885e3391';
-
-  // const faucetService = new FaucetService(provider, faucetAddress);
-
-  // const tx = faucet.mint({ userAddress, reserve, tokenSymbol: 'USDC' });
-
-
-  //     const market = markets.AaveV3Sepolia;
-  //     const {POOL, WETH_GATEWAY} = market;
-  //     const TOKEN = market.ASSETS.USDC.UNDERLYING;
-
-  //     const poolBundle = new PoolBundle(provider, {
-  //       WETH_GATEWAY,
-  //       POOL,
-  //     });
-
-
-  //     const txData = await poolBundle.supplyTxBuilder.generateTxData({
-  //       user: USER,
-  //       reserve: TOKEN,
-  //       amount: (1e18 / 1000).toString(),
-
-  //     });
-
-
-  //   })
-
-  it.skip("should supply ETH on L1 sepolia", async () => {
-    const provider = new ethers.providers.JsonRpcProvider(
-      "https://eth-sepolia.g.alchemy.com/v2/tQhwxQjcpEdTJ0QhTCQmpvtlUlppXO6s"
-    );
-
-    const market = markets.AaveV3Sepolia;
-    const { POOL, WETH_GATEWAY } = market;
-    const TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-    const poolBundle = new PoolBundle(provider, {
-      WETH_GATEWAY,
-      POOL,
-    });
-
-    // if TOKEN is ETH, to = WETH_GATEWAY otherwise POOL
-    // expect(result.amount).toEqual('0');
-    // expect(result.token).toEqual(TOKEN);
-    // expect(result.user).toEqual(USER);
-
-    // TODO explicit approval?
-
-
-    const txData = await poolBundle.supplyTxBuilder.generateTxData({
-      user: USER,
-      reserve: TOKEN,
-      amount: (1e18 / 1000).toString(),
-      // onBehalfOf,
-      // referralCode,
-      // useOptimizedPath,
-      // encodedTxData,
-
-    });
-
-    console.log('txData', txData)
-
-    // expect(txData.from).toEqual(USER)
-    // expect(txData.to).toEqual(POOL)
-
-
-    const wallet = new Wallet(privateKey, provider);
-
-    const tx = await wallet.sendTransaction({
-      ...txData,
-    });
-    console.log('tx', tx);
-
-    const results = await tx.wait();
-    console.log('results', results.transactionHash)
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(validInput);
   });
 
+  it("should fail parsing empty input", () => {
+    const emptyInput = {};
+    const result = SupplySchema.safeParse(emptyInput);
 
-  describe('on base L2 sepolia', () => {
-
-    // const { WETH_GATEWAY, L2_ENCODER, POOL } = market;
-
-    const provider = new ethers.providers.JsonRpcProvider(
-      "https://base-sepolia.g.alchemy.com/v2/zrrG4ff6UcLSAHWkrkVpVrX2gBef_YY-"
-    );
-
-    //   const 
+    expect(result.success).toBe(false);
+  });
+});
 
 
 
-    //   const poolBundle = new PoolBundle(provider, {
-    //     WETH_GATEWAY,
-    //     POOL,
-    //     L2_ENCODER
-    //  });
+describe('WithdrawSchema', () => {
 
-    //   it("should supply on L2 base sepolia", async () => {
+  it("should successfully parse valid input", () => {
 
-    //     const txData = await createSupplyTxData(provider, {
-    //       market,
-    //       amount: '1',
-    //       USER,
-    //       TOKEN: markets.AaveV3BaseSepolia.ASSETS.USDC.UNDERLYING
-    //     })
+    const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
+    const validInput = {
+      amount: '1',
+      underlyingAddress: markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING,
+    };
 
-    //     // working with direct contract call at 
-    //     // https://basescan.org/address/0x39e97c588B2907Fb67F44fea256Ae3BA064207C5#readContract
+    const result = WithdrawSchema.safeParse(validInput);
 
-    //     // console.log('supply to pool', POOL, 'with token', TOKEN);
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(validInput);
+  });
 
-    //     //   const params = await poolBundle.supplyTxBuilder.encodeSupplyParams({
-    //     //     reserve: TOKEN,
-    //     //     amount: '1',
-    //     //     referralCode: '0',
-    //     //   });
+  it("should fail parsing empty input", () => {
+    const emptyInput = {};
+    const result = WithdrawSchema.safeParse(emptyInput);
+
+    expect(result.success).toBe(false);
+  });
+});
 
 
-    //     // const txData = await poolBundle.supplyTxBuilder.generateTxData({
-    //     //   user: USER,
-    //     //   reserve: TOKEN,
-    //     //   amount: '',
-    //     //   // amount: (1e6 / 1000).toString(),
-    //     //   // onBehalfOf,
-    //     //   // referralCode,
-    //     //   // useOptimizedPath,
-    //     //   encodedTxData: params,
+describe("Aave Action Provider", () => {
+  const actionProvider = new AaveActionProvider({
+    alchemyApiKey: process.env.ALCHEMY_API_KEY,
+  });
+  let mockWallet: jest.Mocked<EvmWalletProvider>;
+  let mockProvider: jest.Mocked<providers.Provider>;
 
-    //     // });
+  const MOCK_AMOUNT = "100000";
+  const MOCK_USER_ADDRESS = "0x9876543210987654321098765432109876543210";
+  const MOCK_TOKEN_ADDRESS = "0x4200000000000000000000000000000000000006";
+  const MOCK_TX_HASH = "0xabcdef1234567890";
+  const MOCK_RECEIPT = { status: 1, blockNumber: 1234567 };
+
+  const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
+
+  beforeEach(() => {
+    mockWallet = {
+      getAddress: jest.fn().mockReturnValue(MOCK_USER_ADDRESS),
+      getNetwork: jest.fn().mockReturnValue({ protocolFamily: "evm", networkId: "1" }),
+      sendTransaction: jest.fn().mockResolvedValue(MOCK_TX_HASH as `0x${string}`),
+      waitForTransactionReceipt: jest.fn().mockResolvedValue(MOCK_RECEIPT),
+    } as unknown as jest.Mocked<EvmWalletProvider>;
+
+    // mockProvider = {
+    //   _isProvider: true,
+    //   call: jest.fn(),
+    //   Contract: jest.fn().mockImplementation(() => {
+    //     return {
+    //       balanceOf: jest.fn(),
+    //       decimals: jest.fn(),
+    //     }
+    //   }),
+    //   // Wallet: {
+    //   //   fromMnemonic: () => mockedEthersWallet
+    //   // }
 
 
-
-    //     console.log('params', txData);
-
-    //     const wallet = new Wallet(privateKey, provider);
-
-    //     const tx = await wallet.sendTransaction({
-    //       to: POOL,
-    //       // data: params,
-    //       data: txData.data,
-    //       gasLimit: 21000000,
-    //     });
-    //     console.log('tx', tx);
-
-    //     const results = await tx.wait();
-    //     console.log('results', results.transactionHash)
-    //     // await poolBundle.supplyTxBuilder.generateSignedTxData({
-    //     //   user: USER,
-    //     // reserve: TOKEN,
-    //     // amount: '1',
-    //     // signature: '',
-    //     // deadline,
-    //     // })
-    //     // expect(result.success).toBe(true);
-    //     // expect(result.data).toEqual(validInput);
-    //   });
+    // } as unknown as jest.Mocked<providers.Provider>;
 
 
 
-    it.skip('with cdp provider', async () => {
-      // TODO need stable wallet
-      const provider = await CdpWalletProvider.configureWithWallet({
-        // Optional: Provide API key details. If not provided, it will attempt to configure from JSON.
-        apiKeyName: process.env.CDP_API_KEY_NAME,
-        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    mockApprove.mockResolvedValue("Approval successful");
 
-        // Optional: Provide network ID (defaults to base-sepolia if not specified)
-        networkId: "base-sepolia", // other options: "base-mainnet", "ethereum-mainnet", "arbitrum-mainnet", "polygon-mainnet".
+  });
 
-        cdpWalletData
+  describe("supply", () => {
+    it("should successfully supply USDC on Aaave L2 base-sepolia", async () => {
+      const asset = markets.AaveV3Sepolia.ASSETS.USDC;
+      const args = {
+        amount: '1',
+        poolAddress: market.POOL,
+        assetUnderlyingAddress: asset.UNDERLYING,
+        // assetUnderlyingAddress: asset.A_TOKEN,
+      };
+
+
+      let alchemyConfig = {
+        apiKey: process.env.ALCHEMY_API_KEY
+      };
+
+      const provider = new ethers.providers.JsonRpcProvider(
+        `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
+      );
+
+
+      const response = await actionProvider.supply(mockWallet, args);
+
+
+      // fixture from createSupplyTxData with actual provider
+      // as we try to avoid mocking the L2Encoder encode logic and provider 
+      const encodedTxData = '0x0000000000000000000000000000000000000000000000000000000000010000';
+
+      const txData = '0x617ba03700000000000000000000000094a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8000000000000000000000000000000000000000000000000000000000000000100000000000000000000000098765432109876543210987654321098765432100000000000000000000000000000000000000000000000000000000000000000';
+
+      console.log('encodedTxData', encodedTxData)
+
+
+      expect(mockWallet.sendTransaction).toHaveBeenCalledWith({
+        to: market.POOL as `0x${string}`,
+        data: txData
       });
-      console.log('provider', provider);
 
-      const address = await provider.getAddress();
-      const balance = await provider.getBalance();
+      expect(mockWallet.waitForTransactionReceipt).toHaveBeenCalledWith(MOCK_TX_HASH);
+      expect(response).toContain(`Supplied ${args.assetUnderlyingAddress} to Aave v3 Pool`);
+      expect(response).toContain(MOCK_TX_HASH);
+      expect(response).toContain(JSON.stringify(MOCK_RECEIPT));
+    });
 
-      console.log('address', address, balance);
-      //   console.log('supply to pool', POOL, 'with token', TOKEN);
+    //   it("should handle errors when depositing", async () => {
+    //     const args = {
+    //       vaultAddress: MOCK_VAULT_ADDRESS,
+    //       assets: MOCK_WHOLE_ASSETS,
+    //       receiver: MOCK_RECEIVER_ID,
+    //       tokenAddress: MOCK_TOKEN_ADDRESS,
+    //     };
 
-      //   // TODO approval first
+    //     mockWallet.sendTransaction.mockRejectedValue(new Error("Failed to deposit"));
 
-      // const params = await poolBundle.supplyTxBuilder.encodeSupplyParams({
-      //   reserve: TOKEN,
-      //   amount: '1',
-      //   referralCode: '0',
-      // });
+    //     const response = await actionProvider.deposit(mockWallet, args);
 
+    //     expect(response).toContain("Error depositing to Morpho Vault: Error: Failed to deposit");
+    //   });
+    // });
 
-      // const txData = await poolBundle.supplyTxBuilder.generateTxData({
-      //   user: USER,
-      //   reserve: TOKEN,
-      //   amount: '1',
-      //   // amount: (1e6 / 1000).toString(),
-      //   // onBehalfOf,
-      //   // referralCode,
-      //   // useOptimizedPath,
-      //   encodedTxData: params,
+    describe("supportsNetwork", () => {
+      it("should return true for Base Sepolia", () => {
+        const result = actionProvider.supportsNetwork({
+          protocolFamily: "evm",
+          networkId: "base-sepolia",
+        });
+        expect(result).toBe(true);
+      });
 
-      // });
+      it("should return true for Sepolia", () => {
+        const result = actionProvider.supportsNetwork({
+          protocolFamily: "evm",
+          networkId: "sepolia",
+        });
+        expect(result).toBe(true);
+      });
 
-      // console.log('cdp txData', txData)
-      // const txHash = await provider.sendTransaction({
-      //   to: POOL as Address,
-      //   // data: params,
-      //   data: txData.data as Hex,
-      //   // gasLimit: 21000000,
-      // });
-      // console.log('txHash', txHash);
+      // For now
+      it("should return false for other EVM networks except sepolia", () => {
+        const result = actionProvider.supportsNetwork({
+          protocolFamily: "evm",
+          networkId: "ethereum",
+        });
+        expect(result).toBe(false);
+      });
 
-      // const results = await tx.wait();
-    })
-
-  })
-
-}); 
+      it("should return false for non-EVM networks", () => {
+        const result = actionProvider.supportsNetwork({
+          protocolFamily: "bitcoin",
+          networkId: "base-mainnet",
+        });
+        expect(result).toBe(false);
+      });
+    });
+  });
+});

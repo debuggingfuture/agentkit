@@ -1,41 +1,43 @@
 import { ERC20Service, Pool, PoolBundle } from "@aave/contract-helpers";
 import { providers } from "ethers-v5";
-import { Address } from "viem";
+import { Address, formatUnits } from "viem";
 import { MarketConfig } from "./markets";
 
+// align addres-book convention
 type Asset = {
   UNDERLYING: Address;
+  decimals: number;
   A_TOKEN: Address;
 }
 
 export type SupplyParams = {
-  USER: Address;
-  amount: string;
-  ASSET: Asset;
+  user: Address;
+  amount: bigint;
+  asset: Asset;
   market: MarketConfig;
 }
 
 export type WithdrawParams = {
-  USER: Address;
-  amount: string;
-  ASSET: Asset;
+  user: Address;
+  amount: bigint;
+  asset: Asset;
   market: MarketConfig;
 }
 
 // pre-approve, consider use permit
 export const createApprovePoolTxData = async (provider: providers.Provider, params: SupplyParams) => {
 
-  const { USER, ASSET, amount } = params;
+  const { user, asset, amount } = params;
 
   const { WETH_GATEWAY, L2_ENCODER, POOL } = params.market;
 
   const erc20Service = new ERC20Service(provider);
 
   const txData = await erc20Service.approveTxData({
-    user: USER,
+    user,
     spender: POOL,
-    token: ASSET.UNDERLYING,
-    amount: amount,
+    token: asset.UNDERLYING,
+    amount: amount.toString(),
   })
 
   return {
@@ -53,11 +55,13 @@ export const createApprovePoolTxData = async (provider: providers.Provider, para
  * Current implementation assume pre-approved
  * @param provider 
  * @param params 
+ *    amount - expect bigint accounted for decimals
+ *    poolBundle.supplyTxBuilder.encodeSupplyParams will not adjust for decimals
  * @returns 
  */
 export const createSupplyTxData = async (provider: providers.Provider, params: SupplyParams) => {
 
-  const { USER, ASSET, amount } = params;
+  const { user, asset } = params;
 
   const { WETH_GATEWAY, L2_ENCODER, POOL } = params.market;
 
@@ -67,30 +71,41 @@ export const createSupplyTxData = async (provider: providers.Provider, params: S
     L2_ENCODER
   });
 
+  const amount = params.amount.toString();
+
 
   const encodedTxData = await poolBundle.supplyTxBuilder.encodeSupplyParams({
-    reserve: ASSET.UNDERLYING,
+    reserve: asset.UNDERLYING,
     amount,
     referralCode: '0',
   });
 
   const txData = await poolBundle.supplyTxBuilder.generateTxData({
-    user: USER,
-    reserve: ASSET.UNDERLYING,
+    user,
+    reserve: asset.UNDERLYING,
     amount,
     encodedTxData,
   });
 
   return {
     poolBundle,
+    encodedTxData,
     txData
   };
 
 }
 
+/**
+ * 
+ * @param provider 
+ * @param params 
+ *    amount - expect bigint accounted for decimals per token (to align supply)
+ *    pool.withdraw handle decimals from token contract internally
+ * @returns 
+ */
 export const createWithdrawTxData = async (provider: providers.Provider, params: WithdrawParams) => {
 
-  const { USER, ASSET, amount } = params;
+  const { user, asset } = params;
 
   const { WETH_GATEWAY, L2_ENCODER, POOL } = params.market;
 
@@ -100,23 +115,25 @@ export const createWithdrawTxData = async (provider: providers.Provider, params:
     L2_ENCODER
   });
 
+  const amount = formatUnits(params.amount, asset.decimals);
 
   const withDrawTxs = await pool.withdraw({
-    user: USER,
-    reserve: ASSET.UNDERLYING,
-    amount,
-    aTokenAddress: ASSET.A_TOKEN,
+    user,
+    reserve: asset.UNDERLYING,
+    amount: amount.toString(),
+    aTokenAddress: asset.A_TOKEN,
     useOptimizedPath: true
     // onBehalfOf,
   });
 
-  // TODO fix this always estimateGas which is unstable
+  const withDrawTxDatas = await Promise.all(
+    withDrawTxs.map(({ tx }) => tx())
+  )
 
-  const withDrawTxData = await withDrawTxs?.[0].tx();
 
   return {
     pool,
-    withDrawTxDatas: [withDrawTxData]
+    withDrawTxDatas
   };
 
 }

@@ -13,29 +13,33 @@ jest.setTimeout(60_000);
 describe('aaveActionUtil', () => {
     // 0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526
     const privateKey = process.env.PRIVATE_KEY || '';
+
     const cdpWalletData = process.env.CDP_WALLET_DATA || '{}';
+
+    let alchemyConfig = {
+        apiKey: process.env.ALCHEMY_API_KEY
+    };
 
 
     describe('L1 sepolia', () => {
         const provider = new ethers.providers.JsonRpcProvider(
-            "https://eth-sepolia.g.alchemy.com/v2/zrrG4ff6UcLSAHWkrkVpVrX2gBef_YY-"
+            `https://eth-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
         );
 
         const market = AAVEV3_SEPOLIA_MARKET_CONFIG;
 
 
-
         test.skip('#createSupplyTxData work with native wallet', async () => {
 
             const wallet = new Wallet(privateKey, provider);
-            const USER = await wallet.getAddress() as Address;
+            const user = await wallet.getAddress() as Address;
 
             // TODO segregation integration test with mocks
             const { txData } = await createSupplyTxData(provider, {
                 market,
-                amount: '1',
-                USER,
-                ASSET: markets.AaveV3Sepolia.ASSETS.USDC
+                amount: 1n,
+                user,
+                asset: markets.AaveV3Sepolia.ASSETS.USDC
             });
             const tx = await wallet.sendTransaction({
                 to: market.POOL,
@@ -51,11 +55,11 @@ describe('aaveActionUtil', () => {
 
     describe('L2 base sepolia', () => {
         const provider = new ethers.providers.JsonRpcProvider(
-            "https://base-sepolia.g.alchemy.com/v2/zrrG4ff6UcLSAHWkrkVpVrX2gBef_YY-"
+            `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
         );
 
         const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
-        const ASSET = markets.AaveV3BaseSepolia.ASSETS.USDC;
+        const asset = markets.AaveV3BaseSepolia.ASSETS.USDC;
 
         const ALLOWANCE_DEFAULT = (1000 * 1e6).toString();
 
@@ -64,7 +68,7 @@ describe('aaveActionUtil', () => {
             const privateKey = process.env.PRIVATE_KEY || '';
 
             const wallet = new Wallet(privateKey, provider);
-            const USER = await wallet.getAddress() as Address;
+            const user = await wallet.getAddress() as Address;
 
 
             // const { erc20Service, txData: approvalTxData } = await createApprovePoolTxData(provider, {
@@ -79,15 +83,15 @@ describe('aaveActionUtil', () => {
             // });
 
             const amount = (1e6 / 100).toString();
-            console.log('USER', USER, 'supply to pool', market.POOL, amount);
+            console.log('USER', user, 'supply to pool', market.POOL, amount);
 
 
             // TODO segregation integration test with mocks
             const { poolBundle, txData } = await createSupplyTxData(provider, {
                 market,
-                amount,
-                USER,
-                ASSET
+                amount: 1n,
+                user,
+                asset
             });
 
 
@@ -108,9 +112,9 @@ describe('aaveActionUtil', () => {
             // TODO this amount to be parsed as wei
             const { withDrawTxDatas } = await createWithdrawTxData(provider, {
                 market,
-                amount: '0.01',
-                USER,
-                ASSET
+                amount: 1n,
+                user,
+                asset
             });
 
             const withdrawTxHash = await wallet.sendTransaction({
@@ -138,9 +142,9 @@ describe('aaveActionUtil', () => {
                 cdpWalletData,
             });
 
-            const USER = cdpWalletProvider.getAddress() as Address;
+            const user = cdpWalletProvider.getAddress() as Address;
             const amount = (1e6 / 100).toString();
-            console.log('USER', USER, 'supply to pool', market.POOL, amount);
+            console.log('USER', user, 'supply to pool', market.POOL, amount);
 
 
             // Approve for allowance
@@ -162,9 +166,9 @@ describe('aaveActionUtil', () => {
             // use utilties with ethers-v5 provider to encode, while send txn with viem
             const { txData } = await createSupplyTxData(provider, {
                 market,
-                amount,
-                USER,
-                ASSET
+                amount: 1n,
+                user,
+                asset
             });
 
             console.log('txData', txData);
@@ -183,9 +187,9 @@ describe('aaveActionUtil', () => {
 
             const { withDrawTxDatas } = await createWithdrawTxData(provider, {
                 market,
-                amount: '1',
-                USER,
-                ASSET
+                amount: 1n,
+                user,
+                asset
             });
 
             console.log('withDrawTxDatas', withDrawTxDatas)
