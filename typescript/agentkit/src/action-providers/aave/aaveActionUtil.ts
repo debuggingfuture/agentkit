@@ -1,6 +1,6 @@
 import { ERC20Service, Pool, PoolBundle } from "@aave/contract-helpers";
 import { providers } from "ethers-v5";
-import { Address, formatUnits } from "viem";
+import { Address, formatEther, formatGwei, formatUnits, TransactionRequest } from "viem";
 import { MarketConfig } from "./markets";
 
 // align addres-book convention
@@ -25,6 +25,7 @@ export type WithdrawParams = {
 }
 
 // pre-approve, consider use permit
+// @deprecated use typescript/agentkit/src/utils.ts
 export const createApprovePoolTxData = async (provider: providers.Provider, params: SupplyParams) => {
 
   const { user, asset, amount } = params;
@@ -74,6 +75,23 @@ export const createSupplyTxData = async (provider: providers.Provider, params: S
   const amount = params.amount.toString();
 
 
+  if (!L2_ENCODER) {
+    // L1
+
+    const txData = await poolBundle.supplyTxBuilder.generateTxData({
+      user,
+      reserve: asset.UNDERLYING,
+      amount,
+    });
+
+    return {
+      poolBundle,
+      txData: txData as TransactionRequest
+    }
+
+  }
+
+  // L2
   const encodedTxData = await poolBundle.supplyTxBuilder.encodeSupplyParams({
     reserve: asset.UNDERLYING,
     amount,
@@ -90,7 +108,7 @@ export const createSupplyTxData = async (provider: providers.Provider, params: S
   return {
     poolBundle,
     encodedTxData,
-    txData
+    txData: txData as TransactionRequest
   };
 
 }
@@ -115,14 +133,21 @@ export const createWithdrawTxData = async (provider: providers.Provider, params:
     L2_ENCODER
   });
 
-  const amount = formatUnits(params.amount, asset.decimals);
+
+
+  let amount = formatUnits(params.amount, asset.decimals);
+  if (asset.UNDERLYING === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
+    amount = formatEther(params.amount);
+    // wethGatewayService.withdrawEth will revert this to gwei
+  }
+
 
   const withDrawTxs = await pool.withdraw({
     user,
     reserve: asset.UNDERLYING,
-    amount: amount.toString(),
+    amount,
     aTokenAddress: asset.A_TOKEN,
-    useOptimizedPath: true
+    useOptimizedPath: !!L2_ENCODER
     // onBehalfOf,
   });
 

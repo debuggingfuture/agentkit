@@ -42,18 +42,7 @@ export const WithdrawSchema = z
   .object({
     amount: z.custom<bigint>().describe("The amount of the asset to withdraw"),
 
-    assetUnderlyingAddress: z.string()
-      .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
-      .describe("The contract address of the underlying token of asset to supply"),
-
-    poolAddress: z.string()
-      .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
-      .describe("The contract address of the market pool to supply"),
-
-    assetATokenAddress: z.string()
-      .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
-      .optional()
-      .describe("The contract address of the underlying token of asset to supply"),
+    asset: AssetSchema,
 
   })
   .strip()
