@@ -7,7 +7,9 @@ import {
   cdpApiActionProvider,
   cdpWalletActionProvider,
   pythActionProvider,
+  morphoActionProvider,
 } from "@coinbase/agentkit";
+import { aaveActionProvider } from "../../agentkit/src/action-providers/aave/aaveActionProvider";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
@@ -98,10 +100,15 @@ async function initializeAgent() {
         pythActionProvider(),
         walletActionProvider(),
         erc20ActionProvider(),
+        // @ts-ignore outdated types at release
+        aaveActionProvider({
+          alchemyApiKey: process.env.ALCHEMY_API_KEY,
+        }),
         cdpApiActionProvider({
           apiKeyName: process.env.CDP_API_KEY_NAME,
           apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
         }),
+        morphoActionProvider(),
         cdpWalletActionProvider({
           apiKeyName: process.env.CDP_API_KEY_NAME,
           apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
@@ -160,7 +167,8 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
   // eslint-disable-next-line no-constant-condition
   while (true) {
 
-    // TODO rxjs for periodic action
+    // TODO rxjs for periodic action / listen to events
+    // do analysis / computations
     try {
       const thought =
         "Act accord to the policy below." +

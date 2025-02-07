@@ -1,23 +1,17 @@
 import { z } from "zod";
 
 import { ethers, providers } from 'ethers-v5';
-import {
-  UiPoolDataProvider,
-  UiIncentiveDataProvider,
-  ChainId,
-} from '@aave/contract-helpers';
-import * as markets from '@bgd-labs/aave-address-book';
 
 import { CreateAction } from "../actionDecorator";
 import { ActionProvider } from "../actionProvider";
 import { Network } from "../../network";
-import { EvmWalletProvider } from "../../wallet-providers";
+import { EvmWalletProvider, WalletProvider } from "../../wallet-providers";
 import { SupplySchema } from "./schemas";
-import { WithdrawSchema } from "../morpho";
 import { AAVEV3_BASE_SEPOLIA_MARKET_CONFIG } from "./markets";
 import { AaveAsset, createSupplyTxData } from "./aaveActionUtil";
 import { Address, Hex } from "viem";
 
+export const SUPPORTED_NETWORKS = ["sepolia", "base-sepolia"];
 
 /**
  * Configuration options for the AaveActionProvider.
@@ -33,7 +27,7 @@ export interface AaveActionProviderConfig {
 /**
  * ERC20ActionProvider is an action provider for ERC20 tokens.
  */
-export class AaveActionProvider extends ActionProvider {
+export class AaveActionProvider extends ActionProvider<WalletProvider> {
   private readonly provider: providers.Provider;
 
   /**
@@ -137,7 +131,7 @@ Important notes:
    * @param network - The network to check.
    * @returns True if the ERC20 action provider supports the network, false otherwise.
    */
-  supportsNetwork = (network: Network) => ['sepolia', 'base-sepolia'].includes(network.networkId!);
+  supportsNetwork = (network: Network) => SUPPORTED_NETWORKS.includes(network.networkId!);
 }
 
 export const aaveActionProvider = (config: AaveActionProviderConfig) => new AaveActionProvider(config);
