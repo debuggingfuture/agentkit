@@ -15,7 +15,7 @@ import { EvmWalletProvider } from "../../wallet-providers";
 import { SupplySchema } from "./schemas";
 import { WithdrawSchema } from "../morpho";
 import { AAVEV3_BASE_SEPOLIA_MARKET_CONFIG } from "./markets";
-import { createSupplyTxData } from "./aaveActionUtil";
+import { AaveAsset, createSupplyTxData } from "./aaveActionUtil";
 import { Address, Hex } from "viem";
 
 
@@ -47,11 +47,16 @@ export class AaveActionProvider extends ActionProvider {
       throw new Error("ALCHEMY_API_KEY is not configured.");
     }
 
-    // TODO network
+    // TODO network agnostic
     this.provider = new ethers.providers.JsonRpcProvider(
       `https://base-sepolia.g.alchemy.com/v2/${config.alchemyApiKey}`
     );
 
+  }
+
+  private getProvider(network: Network) {
+    // TODO
+    return this.provider;
   }
 
   /**
@@ -87,7 +92,6 @@ Important notes:
     try {
 
       console.log('supply', args);
-
       // TODO get current network
       // const provider = walletProvider.provider;
       // const networkId = provider.network.chainId as ChainId;
@@ -97,7 +101,8 @@ Important notes:
 
       const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
 
-      const { poolAddress, assetUnderlyingAddress, assetATokenAddress } = args;
+      const { poolAddress, asset } = args;
+
 
       const user = await walletProvider.getAddress() as Address;
 
@@ -105,12 +110,7 @@ Important notes:
         market,
         amount: 1n,
         user,
-        asset: {
-          UNDERLYING: assetUnderlyingAddress as Address,
-          decimals: 6,
-          A_TOKEN: assetATokenAddress as Address
-        }
-
+        asset: asset as AaveAsset
       });
 
       console.log(txData, encodedTxData)
@@ -123,11 +123,11 @@ Important notes:
 
       const receipt = await walletProvider.waitForTransactionReceipt(txHash);
 
-      // TODO get symbol froma assets
+      // TODO get symbol from assets
 
-      return `Supplied ${args.assetUnderlyingAddress} to Aave v3 Pool ${args.poolAddress} with transaction hash: ${txHash}\nTransaction receipt: ${JSON.stringify(receipt)}`;
+      return `Supplied ${asset.UNDERLYING} to Aave v3 Pool ${args.poolAddress} with transaction hash: ${txHash}\nTransaction receipt: ${JSON.stringify(receipt)}`;
     } catch (error) {
-      return `Error getting balance: ${error}`;
+      return `Error supplying to Aave v3: ${error}`;
     }
   }
 

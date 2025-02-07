@@ -4,7 +4,7 @@ import { Address, formatUnits } from "viem";
 import { MarketConfig } from "./markets";
 
 // align addres-book convention
-type Asset = {
+export type AaveAsset = {
   UNDERLYING: Address;
   decimals: number;
   A_TOKEN: Address;
@@ -13,14 +13,14 @@ type Asset = {
 export type SupplyParams = {
   user: Address;
   amount: bigint;
-  asset: Asset;
+  asset: AaveAsset;
   market: MarketConfig;
 }
 
 export type WithdrawParams = {
   user: Address;
   amount: bigint;
-  asset: Asset;
+  asset: AaveAsset;
   market: MarketConfig;
 }
 

@@ -68,19 +68,25 @@ describe('WithdrawSchema', () => {
 
 
 describe("Aave Action Provider", () => {
+  const alchemyConfig = {
+    apiKey: process.env.ALCHEMY_API_KEY
+  };
+
   const actionProvider = new AaveActionProvider({
     alchemyApiKey: process.env.ALCHEMY_API_KEY,
   });
   let mockWallet: jest.Mocked<EvmWalletProvider>;
   let mockProvider: jest.Mocked<providers.Provider>;
 
-  const MOCK_AMOUNT = "100000";
+
   const MOCK_USER_ADDRESS = "0x9876543210987654321098765432109876543210";
-  const MOCK_TOKEN_ADDRESS = "0x4200000000000000000000000000000000000006";
   const MOCK_TX_HASH = "0xabcdef1234567890";
   const MOCK_RECEIPT = { status: 1, blockNumber: 1234567 };
 
   const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
+
+
+
 
   beforeEach(() => {
     mockWallet = {
@@ -112,20 +118,38 @@ describe("Aave Action Provider", () => {
 
   });
 
-  describe("supply", () => {
-    it("should successfully supply USDC on Aaave L2 base-sepolia", async () => {
+  describe('withdraw', () => {
+    it("should successfully withdraw USDC from Aave v3 L2 bas-sepolia", async () => {
       const asset = markets.AaveV3Sepolia.ASSETS.USDC;
       const args = {
         amount: '1',
         poolAddress: market.POOL,
         assetUnderlyingAddress: asset.UNDERLYING,
-        // assetUnderlyingAddress: asset.A_TOKEN,
+        assetATokenAddress: asset.A_TOKEN,
       };
 
 
-      let alchemyConfig = {
-        apiKey: process.env.ALCHEMY_API_KEY
+      const provider = new ethers.providers.JsonRpcProvider(
+        `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
+      );
+
+
+      // const response = await actionProvider.withdraw(mockWallet, args);
+
+    });
+
+  })
+
+  describe("supply", () => {
+    it("should successfully supply USDC on Aaave v3 L2 base-sepolia", async () => {
+      const asset = markets.AaveV3Sepolia.ASSETS.USDC;
+      const args = {
+        amount: '1',
+        poolAddress: market.POOL,
+        asset
       };
+
+
 
       const provider = new ethers.providers.JsonRpcProvider(
         `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
@@ -133,7 +157,6 @@ describe("Aave Action Provider", () => {
 
 
       const response = await actionProvider.supply(mockWallet, args);
-
 
       // fixture from createSupplyTxData with actual provider
       // as we try to avoid mocking the L2Encoder encode logic and provider 
@@ -150,60 +173,63 @@ describe("Aave Action Provider", () => {
       });
 
       expect(mockWallet.waitForTransactionReceipt).toHaveBeenCalledWith(MOCK_TX_HASH);
-      expect(response).toContain(`Supplied ${args.assetUnderlyingAddress} to Aave v3 Pool`);
+      expect(response).toContain(`Supplied ${args.asset.UNDERLYING} to Aave v3 Pool`);
       expect(response).toContain(MOCK_TX_HASH);
       expect(response).toContain(JSON.stringify(MOCK_RECEIPT));
     });
 
-    //   it("should handle errors when depositing", async () => {
-    //     const args = {
-    //       vaultAddress: MOCK_VAULT_ADDRESS,
-    //       assets: MOCK_WHOLE_ASSETS,
-    //       receiver: MOCK_RECEIVER_ID,
-    //       tokenAddress: MOCK_TOKEN_ADDRESS,
-    //     };
+    it("should handle transaction errors when supplying", async () => {
 
-    //     mockWallet.sendTransaction.mockRejectedValue(new Error("Failed to deposit"));
+      const asset = markets.AaveV3Sepolia.ASSETS.USDC;
+      const args = {
+        amount: '0',
+        poolAddress: market.POOL,
+        asset
+      };
 
-    //     const response = await actionProvider.deposit(mockWallet, args);
+      mockWallet.sendTransaction.mockRejectedValue(new Error("Failed to supply"));
 
-    //     expect(response).toContain("Error depositing to Morpho Vault: Error: Failed to deposit");
-    //   });
-    // });
+      const response = await actionProvider.supply(mockWallet, args);
 
-    describe("supportsNetwork", () => {
-      it("should return true for Base Sepolia", () => {
-        const result = actionProvider.supportsNetwork({
-          protocolFamily: "evm",
-          networkId: "base-sepolia",
-        });
-        expect(result).toBe(true);
+      expect(response).toContain("Error supplying to Aave v3: Error: Failed to supply");
+    });
+  });
+
+
+
+
+  describe("supportsNetwork", () => {
+    it("should return true for Base Sepolia", () => {
+      const result = actionProvider.supportsNetwork({
+        protocolFamily: "evm",
+        networkId: "base-sepolia",
       });
+      expect(result).toBe(true);
+    });
 
-      it("should return true for Sepolia", () => {
-        const result = actionProvider.supportsNetwork({
-          protocolFamily: "evm",
-          networkId: "sepolia",
-        });
-        expect(result).toBe(true);
+    it("should return true for Sepolia", () => {
+      const result = actionProvider.supportsNetwork({
+        protocolFamily: "evm",
+        networkId: "sepolia",
       });
+      expect(result).toBe(true);
+    });
 
-      // For now
-      it("should return false for other EVM networks except sepolia", () => {
-        const result = actionProvider.supportsNetwork({
-          protocolFamily: "evm",
-          networkId: "ethereum",
-        });
-        expect(result).toBe(false);
+    // For now
+    it("should return false for other EVM networks except sepolia", () => {
+      const result = actionProvider.supportsNetwork({
+        protocolFamily: "evm",
+        networkId: "ethereum",
       });
+      expect(result).toBe(false);
+    });
 
-      it("should return false for non-EVM networks", () => {
-        const result = actionProvider.supportsNetwork({
-          protocolFamily: "bitcoin",
-          networkId: "base-mainnet",
-        });
-        expect(result).toBe(false);
+    it("should return false for non-EVM networks", () => {
+      const result = actionProvider.supportsNetwork({
+        protocolFamily: "bitcoin",
+        networkId: "base-mainnet",
       });
+      expect(result).toBe(false);
     });
   });
 });
