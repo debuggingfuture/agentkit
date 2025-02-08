@@ -7,11 +7,38 @@ import { ActionProvider } from "../actionProvider";
 import { Network } from "../../network";
 import { EvmWalletProvider, WalletProvider } from "../../wallet-providers";
 import { SupplySchema } from "./schemas";
-import { AAVEV3_BASE_SEPOLIA_MARKET_CONFIG } from "./markets";
+import { AAVEV3_BASE_SEPOLIA, AAVEV3_BASE_SEPOLIA_MARKET_CONFIG, AAVEV3_SEPOLIA, AAVEV3_SEPOLIA_MARKET_CONFIG, MarketConfig } from "./markets";
 import { AaveAsset, createSupplyTxData } from "./aaveActionUtil";
-import { Address, Hex } from "viem";
+import { Address, Hex, parseUnits } from "viem";
+import { approve } from "../../utils";
 
 export const SUPPORTED_NETWORKS = ["sepolia", "base-sepolia"];
+
+// @ts-ignore
+BigInt.prototype.toJSON = function () {
+
+  return this.toString();
+
+};
+// Not as action args for better agent guardrails
+
+export const findAaveMarketAssets = (networkId: string): {
+  market: MarketConfig,
+  assets: Record<string, AaveAsset>
+} => {
+  const config = {
+    'base-sepolia': AAVEV3_BASE_SEPOLIA,
+    'sepolia': AAVEV3_SEPOLIA
+  }[networkId];
+
+  if (!config) {
+    throw new Error(`MarketAssets not found for network ${networkId}`);
+  }
+  return config
+
+}
+
+
 
 /**
  * Configuration options for the AaveActionProvider.
@@ -48,6 +75,20 @@ export class AaveActionProvider extends ActionProvider<WalletProvider> {
 
   }
 
+  async approveAll(walletProvider: EvmWalletProvider) {
+
+
+    const networkId = walletProvider.getNetwork().networkId || 'base-sepolia';
+    const { market, assets } = findAaveMarketAssets(networkId);
+    console.log('approve all assets on ', networkId);
+    for await (const asset of Object.values(assets)) {
+      console.log('approve', asset.UNDERLYING, 'pool', market.POOL);
+      const results = await approve(walletProvider, asset.UNDERLYING, market.POOL, 1000000000n);
+      console.log(results);
+    }
+
+  }
+
   private getProvider(network: Network) {
     // TODO
     return this.provider;
@@ -63,19 +104,14 @@ export class AaveActionProvider extends ActionProvider<WalletProvider> {
   @CreateAction({
     name: "supply",
     description: `
-This tool allows depositing assets into a Morpho Vault. 
+* This tool allows supplying assets into a Aave v3 protocol market such as USDC
 
 It takes:
-- underlyingAddress: The address of the asset to deposit to
-- assets: The amount of assets to deposit in units accounted for decimal
-  Examples for USDC:
-  - 100000 USDC
-  - 1000000 USDc
-  - 10000000 USDC
-  
+- assetAddress: The address of the asset to supply
+- amount: The amount of assets to deposit in whole units accounted for decimal. 
 Important notes:
 - Make sure to use the exact amount provided. Do not convert units for assets for this action.
-- Please use a token address (example 0x4200000000000000000000000000000000000006) for the tokenAddress field.
+- Please use a token address (example 0x4200000000000000000000000000000000000006) for the assetAddress field.
 `,
     schema: SupplySchema,
   })
@@ -85,29 +121,32 @@ Important notes:
   ): Promise<string> {
     try {
 
-      console.log('supply', args);
-      // TODO get current network
-      // const provider = walletProvider.provider;
-      // const networkId = provider.network.chainId as ChainId;
-      const networkId = 'base-sepolia';
+      if (args.amount === '0') {
+        // TODO bigint > 0
+        throw new Error('Supply amount must be > 0')
+      }
+      const networkId = walletProvider.getNetwork().networkId || 'base-sepolia';
+      const { market, assets } = findAaveMarketAssets(networkId);
+      const asset = assets?.[args.assetAddress] as AaveAsset;
 
-      // const market = markets.getMarket(networkId);
+      console.log('aave supply', args, parseUnits(args.amount, 0),);
 
-      const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
+      console.log('asset', assets?.[args.assetAddress]);
 
-      const { poolAddress, asset } = args;
-
+      const poolAddress = market.POOL;
 
       const user = await walletProvider.getAddress() as Address;
 
       const { poolBundle, txData, encodedTxData } = await createSupplyTxData(this.provider, {
         market,
-        amount: 1n,
+        amount: parseUnits(args.amount, 0),
         user,
-        asset: asset as AaveAsset
+        asset
       });
 
-      console.log(txData, encodedTxData)
+      console.log('create supply tx data')
+
+      console.log(txData, encodedTxData);
 
 
       const txHash = await walletProvider.sendTransaction({
@@ -117,10 +156,9 @@ Important notes:
 
       const receipt = await walletProvider.waitForTransactionReceipt(txHash);
 
-      // TODO get symbol from assets
-
-      return `Supplied ${asset.UNDERLYING} to Aave v3 Pool ${args.poolAddress} with transaction hash: ${txHash}\nTransaction receipt: ${JSON.stringify(receipt)}`;
+      return `Supplied ${args.amount} units of ${args.assetAddress} to Aave v3 Pool ${poolAddress} with transaction hash: ${txHash} status:${receipt.status}`;
     } catch (error) {
+      console.error(error)
       return `Error supplying to Aave v3: ${error}`;
     }
   }

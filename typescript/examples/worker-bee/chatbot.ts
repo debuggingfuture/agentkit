@@ -8,15 +8,23 @@ import {
   cdpWalletActionProvider,
   pythActionProvider,
   morphoActionProvider,
+  EvmWalletProvider,
 } from "@coinbase/agentkit";
-import { aaveActionProvider } from "../../agentkit/src/action-providers/aave/aaveActionProvider";
+import { aaveActionProvider, findAaveMarketAssets } from "../../agentkit/src/action-providers/aave/aaveActionProvider";
+// import { AAVEV3_SEPOLIA, AAVEV3_BASE_SEPOLIA, AAVEV3_BASE_SEPOLIA } from "../../agentkit/src/action-providers/aave/markets";
+import { approve } from "../../agentkit/src/utils";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
+import * as markets from '@bgd-labs/aave-address-book';
+// TODO replace dotenv with external env config
 import * as dotenv from "dotenv";
-import * as fs from "fs";
+
+import { expand, fromEvent, interval, of, race, repeat, take } from 'rxjs';
+import { createAddressbookPrompt, createPortfolioPrompt } from "./prompt-util";
+import SwarmPortfolioService from "./swarm-portfolio.service";
 
 dotenv.config();
 
@@ -55,8 +63,6 @@ function validateEnvironment(): void {
 // Add this right after imports and before any other code
 validateEnvironment();
 
-// Configure a file to persist the agent's CDP MPC Wallet Data
-const WALLET_DATA_FILE = "wallet_data.txt";
 
 /**
  * Initialize the agent with CDP Agentkit
@@ -70,27 +76,27 @@ async function initializeAgent() {
       model: "gpt-4o-mini",
     });
 
-    let walletDataStr: string | null = null;
 
-    // Read existing wallet data if available
-    if (fs.existsSync(WALLET_DATA_FILE)) {
-      try {
-        walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
-      } catch (error) {
-        console.error("Error reading wallet data:", error);
-        // Continue without wallet data
-      }
-    }
+    // we could use watchEvents to listen to aave contract events
+    // or balances change
+    // now we keep it simple to keep update portfolio
 
     // Configure CDP Wallet Provider
     const config = {
       apiKeyName: process.env.CDP_API_KEY_NAME,
       apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      cdpWalletData: walletDataStr || undefined,
+      cdpWalletData: process.env.CDP_WALLET_DATA || '{}',
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
 
+    const aaveAction = aaveActionProvider({
+      alchemyApiKey: process.env.ALCHEMY_API_KEY,
+    });
+
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
+
+    // @ts-ignore
+    await aaveAction.approveAll(walletProvider);
 
     // Initialize AgentKit
     const agentkit = await AgentKit.from({
@@ -100,19 +106,17 @@ async function initializeAgent() {
         pythActionProvider(),
         walletActionProvider(),
         erc20ActionProvider(),
-        // @ts-ignore outdated types at release
-        aaveActionProvider({
-          alchemyApiKey: process.env.ALCHEMY_API_KEY,
-        }),
-        cdpApiActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
-        morphoActionProvider(),
-        cdpWalletActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
+        // @ts-ignore outdated types
+        aaveAction,
+        // cdpApiActionProvider({
+        //   apiKeyName: process.env.CDP_API_KEY_NAME,
+        //   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        // }),
+        // morphoActionProvider(),
+        // cdpWalletActionProvider({
+        //   apiKeyName: process.env.CDP_API_KEY_NAME,
+        //   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        // }),
       ],
     });
 
@@ -129,9 +133,7 @@ async function initializeAgent() {
       checkpointSaver: memory,
       messageModifier: `
         You are a helpful agent that can interact onchain using the Coinbase Developer Platform AgentKit. You are 
-        empowered to interact onchain using your tools. If you ever need funds, you can request them from the 
-        faucet if you are on network ID 'base-sepolia'. If not, you can provide your wallet details and request 
-        funds from the user. Before executing your first action, get the wallet details to see what network 
+        empowered to interact onchain using your tools. Never use faucet and request_faucet_funds action. Before executing your first action, get the wallet details to see what network 
         you're on. If there is a 5XX (internal) HTTP error code, ask the user to try again later. If someone 
         asks you to do something you can't do with your currently available tools, you must say so, and 
         encourage them to implement it themselves using the CDP SDK + Agentkit, recommend they go to 
@@ -140,11 +142,8 @@ async function initializeAgent() {
         `,
     });
 
-    // Save wallet data
-    const exportedWallet = await walletProvider.exportWallet();
-    fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportedWallet));
 
-    return { agent, config: agentConfig };
+    return { agent, config: agentConfig, walletProvider };
   } catch (error) {
     console.error("Failed to initialize agent:", error);
     throw error; // Re-throw to be handled by caller
@@ -159,51 +158,90 @@ async function initializeAgent() {
  * @param interval - Time interval between actions in seconds
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runAutonomousMode(agent: any, config: any, interval = 10) {
+async function runAutonomousMode(agent: any, config: any, walletProvider: EvmWalletProvider) {
   console.log("Starting autonomous mode...");
+
 
   // TODO load policy from ipfs 
 
+  const swarmAddresses = [
+    walletProvider.getAddress(),
+    '0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526'
+  ] as `0x${string}`[];
   // eslint-disable-next-line no-constant-condition
-  while (true) {
+  const swarmPortfolioService = new SwarmPortfolioService(
+    swarmAddresses,
+    [markets.AaveV3BaseSepolia.ASSETS.USDC.UNDERLYING]
+    , 'base-sepolia');
 
-    // TODO rxjs for periodic action / listen to events
-    // do analysis / computations
+
+  // Create an observable from an event (replace 'actionEvent' with the actual event name)
+  const event$ = swarmPortfolioService.listenToTransactions();
+
+  const interval$ = interval(10 * 1000);
+
+
+  // Build a cycle that waits for either an event or the interval, then re-runs indefinitely.
+  const cycle$ = of(null).pipe(
+    expand(() => race(event$, interval$).pipe(take(1)))
+  ).subscribe(async (value) => {
+
+
+    console.log('agent cycle');
     try {
+      const portfolio = await swarmPortfolioService.getPortfolio();
+
+      console.log(portfolio);
+
       const thought =
-        "Act accord to the policy below." +
-        "You are instructed" +
+        createPortfolioPrompt(config.networkId, portfolio) +
+        "When you communicate token balance, append n to the amount if it is whole unit. i.e. 4n USDC" +
+
+
         "You can use the tools to gather data to make your decision" +
-        "use action supply to supply USDC onto aave testnet, such as sepolia or base-sepolia." +
+        "Aave refers to the v3 lending protocol" +
+        "for erc20 token and actions like get_balance or supply, results is whole unit accounted for decimals. i.e. 4 means 0.000004USDC not 4USDC as USDC use 6 decimals" +
+        "Supply is not a simple transfer. use aave action to supply USDC onto Aave protocol, in testnet such as sepolia or base-sepolia." +
+        "Do not ask for confirmation for supply" +
         "Do not use typical address on mainnet which will be different" +
-        "you are on base-sepolia" +
-        "Note metadata of USDC on sepolia: '{decimals: 6, TOKEN_ADDRESS: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238 }'" +
-        "Note metadata of USDC on base-sepolia: '{decimals: 6, TOKEN_ADDRESS: 0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8 }'" +
-        "Chose action portoflio to check the portfolio of all agents" +
+        "Do not deploy any ERC20, NFT" +
+        createAddressbookPrompt(config.networkId) +
         "Choose an action or set of actions and execute it that highlights your abilities." +
 
-        "Policy: you should take advantage of higher yield. If yield is higher at your responsible market, supply more" +
-        "Avoid supplying more than 50% of total portofolio value at all time"
+        // TODO system prompt
+        // load policy from nillion
+        "Act accord to the policy below. Policy:" +
+        "(Top takes precedence)" +
+        "you should take advantage of higher yield. If yield is higher at your responsible market, supply more." +
+        "You can only supply your own wallet balance, but not control wallet balance of others in the portfolio " +
+
+        "Avoid supplying more than 90% of your total USDC balance" +
+        "Avoid supplying more than 40% of total swarm portofolio value at all time" +
+
+        "Avoid supplying more than 10n at a time"
 
       const stream = await agent.stream({ messages: [new HumanMessage(thought)] }, config);
+
 
       for await (const chunk of stream) {
         if ("agent" in chunk) {
           console.log(chunk.agent.messages[0].content);
         } else if ("tools" in chunk) {
           console.log(chunk.tools.messages[0].content);
+          console.log(chunk.tools);
         }
         console.log("-------------------");
       }
 
-      await new Promise(resolve => setTimeout(resolve, interval * 1000));
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      }
-      process.exit(1);
-    }
-  }
+    } catch (err) {
+      console.error(err);
+
+
+
+    };
+
+
+  });
 }
 
 
@@ -212,9 +250,9 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
  */
 async function main() {
   try {
-    const { agent, config } = await initializeAgent();
+    const { agent, config, walletProvider } = await initializeAgent();
     // always run autonomous mode
-    await runAutonomousMode(agent, config);
+    await runAutonomousMode(agent, config, walletProvider);
   } catch (error) {
     if (error instanceof Error) {
       console.error("Error:", error.message);

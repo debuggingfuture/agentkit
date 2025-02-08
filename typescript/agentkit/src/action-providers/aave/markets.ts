@@ -1,5 +1,6 @@
 import { Address } from "viem";
 import * as markets from '@bgd-labs/aave-address-book';
+import { AaveAsset } from "./aaveActionUtil";
 
 export type MarketConfig = {
     POOL: Address;
@@ -14,6 +15,8 @@ export type MarketConfig = {
 export const AAVEV3_SEPOLIA_MARKET_CONFIG = markets.AaveV3Sepolia as MarketConfig;
 
 
+
+
 export const AAVEV3_BASE_SEPOLIA_MARKET_CONFIG = {
     LENDING_POOL_ADDRESS_PROVIDER: '0xd449FeD49d9C443688d6816fE6872F21402e41de', // AaveV3BaseSepolia.POOL_ADDRESSES_PROVIDER,
     POOL: '0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b', // AaveV3BaseSepolia.POOL,
@@ -22,4 +25,19 @@ export const AAVEV3_BASE_SEPOLIA_MARKET_CONFIG = {
     UI_POOL_DATA_PROVIDER: '0x884702E4b1d0a2900369E83d5765d537F469cAC9', // AaveV3BaseSepolia.UI_POOL_DATA_PROVIDER,
     UI_INCENTIVE_DATA_PROVIDER: '0x52Cb5CDf732889be3fd5d5E3A5D589446e060C0D', // AaveV3BaseSepolia.UI_INCENTIVE_DATA_PROVIDER,
     L2_ENCODER: '0x458d281bFFCE958E34571B33F1F26Bd42Aa27c44', // AaveV3BaseSepolia.L2_ENCODER,
-} as MarketConfig;    
+} as MarketConfig;
+
+
+export const AAVEV3_SEPOLIA = {
+    market: AAVEV3_SEPOLIA_MARKET_CONFIG,
+    assets: {
+        [markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING]: markets.AaveV3Sepolia.ASSETS.USDC
+    } as Record<string, AaveAsset>
+}
+
+export const AAVEV3_BASE_SEPOLIA = {
+    market: AAVEV3_BASE_SEPOLIA_MARKET_CONFIG,
+    assets: {
+        [markets.AaveV3BaseSepolia.ASSETS.USDC.UNDERLYING]: markets.AaveV3BaseSepolia.ASSETS.USDC
+    } as Record<string, AaveAsset>
+}

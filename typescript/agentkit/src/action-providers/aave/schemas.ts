@@ -21,16 +21,20 @@ export const AssetSchema = z.object({
  */
 export const SupplySchema = z
   .object({
-    // amount: z.custom<bigint>().describe("The amount of the asset to supply"),
     amount: z.string()
-      .regex(/^\d+$/, "Must be a valid whole number")
+      .regex(/^\d+$/, "Must be a valid whole number >0")
       .describe("The amount of the asset to supply"),
 
-    asset: AssetSchema,
 
-    poolAddress: z.string()
+    assetAddress: z.string()
       .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
-      .describe("The contract address of the market pool to supply"),
+      .describe("The contract address of the underlying token of asset to supply"),
+
+    // asset: AssetSchema,
+
+    // poolAddress: z.string()
+    //   .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
+    //   .describe("The contract address of the market pool to supply"),
 
 
   })

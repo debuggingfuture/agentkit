@@ -183,8 +183,7 @@ describe("Aave Action Provider", () => {
       const asset = markets.AaveV3Sepolia.ASSETS.USDC;
       const args = {
         amount: '0',
-        poolAddress: market.POOL,
-        asset
+        assetAddress: asset.UNDERLYING,
       };
 
       mockWallet.sendTransaction.mockRejectedValue(new Error("Failed to supply"));

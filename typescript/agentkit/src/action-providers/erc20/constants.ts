@@ -1,3 +1,6 @@
+// Clone
+// import { abi } from "../../agentkit/src/action-providers/erc20/constants";
+
 export const abi = [
   {
     type: "event",
