@@ -12,15 +12,12 @@
 //         cdpWalletData: process.env.CDP_WALLET_DATA || '{}'
 //     };
 
-
-
 //     it("should successfully withdraw USDC from Aave v3 L2 bas-sepolia", async () => {
 
 //         const evmWalletProvider = await CdpWalletProvider.configureWithWallet({
 //             ...CDP_WALLET_CONFIG,
 //             networkId: "base-sepolia", // other options: "base-mainnet", "ethereum-mainnet", "arbitrum-mainnet", "polygon-mainnet".
 //         });
-
 
 //         const response = await actionProvider.supply(evmWalletProvider, {
 //             amount: '1',

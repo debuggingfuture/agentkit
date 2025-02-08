@@ -38,7 +38,7 @@ export async function approve(
 
     console.log(`Approving ${spenderAddress} to spend ${amount} tokens`, await wallet.getAddress());
     const txHash = await wallet.sendTransaction({
-      from: await wallet.getAddress() as `0x${string}`,
+      from: (await wallet.getAddress()) as `0x${string}`,
       to: tokenAddress as `0x${string}`,
       data,
     });
