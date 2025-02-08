@@ -28,6 +28,13 @@ import SwarmPortfolioService from "./swarm-portfolio.service";
 
 dotenv.config();
 
+// @ts-ignore
+BigInt.prototype.toJSON = function () {
+
+  return this.toString();
+
+};
+
 /**
  * Validates that required environment variables are set
  *
