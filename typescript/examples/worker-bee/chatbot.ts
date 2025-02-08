@@ -89,9 +89,7 @@ async function initializeAgent() {
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
 
-    const aaveAction = aaveActionProvider({
-      alchemyApiKey: process.env.ALCHEMY_API_KEY,
-    });
+    const aaveAction = aaveActionProvider();
 
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
 

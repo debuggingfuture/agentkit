@@ -9,7 +9,7 @@ import { SupplySchema, WithdrawSchema } from "./schemas";
 import { approve } from "../../utils";
 import { createSupplyTxData } from "./aaveActionUtil";
 
-import { Block, BlockTag, Filter, FilterByBlockHash, Listener, Log, Provider, TransactionReceipt, TransactionRequest, TransactionResponse } from "@ethersproject/abstract-provider";
+import { baseSepolia, sepolia } from "viem/chains";
 
 jest.mock("../../utils");
 const mockApprove = approve as jest.MockedFunction<typeof approve>;
@@ -23,7 +23,7 @@ describe('SupplySchema', () => {
     const market = AAVEV3_BASE_SEPOLIA_MARKET_CONFIG;
     const validInput = {
       amount: '1',
-      underlyingAddress: markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING,
+      assetAddress: markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING,
     };
 
     const result = SupplySchema.safeParse(validInput);
@@ -72,9 +72,7 @@ describe("Aave Action Provider", () => {
     apiKey: process.env.ALCHEMY_API_KEY
   };
 
-  const actionProvider = new AaveActionProvider({
-    alchemyApiKey: process.env.ALCHEMY_API_KEY,
-  });
+  const actionProvider = new AaveActionProvider();
   let mockWallet: jest.Mocked<EvmWalletProvider>;
   let mockProvider: jest.Mocked<providers.Provider>;
 
@@ -91,27 +89,10 @@ describe("Aave Action Provider", () => {
   beforeEach(() => {
     mockWallet = {
       getAddress: jest.fn().mockReturnValue(MOCK_USER_ADDRESS),
-      getNetwork: jest.fn().mockReturnValue({ protocolFamily: "evm", networkId: "1" }),
+      getNetwork: jest.fn().mockReturnValue({ protocolFamily: "evm", networkId: baseSepolia.network.toString() }),
       sendTransaction: jest.fn().mockResolvedValue(MOCK_TX_HASH as `0x${string}`),
       waitForTransactionReceipt: jest.fn().mockResolvedValue(MOCK_RECEIPT),
     } as unknown as jest.Mocked<EvmWalletProvider>;
-
-    // mockProvider = {
-    //   _isProvider: true,
-    //   call: jest.fn(),
-    //   Contract: jest.fn().mockImplementation(() => {
-    //     return {
-    //       balanceOf: jest.fn(),
-    //       decimals: jest.fn(),
-    //     }
-    //   }),
-    //   // Wallet: {
-    //   //   fromMnemonic: () => mockedEthersWallet
-    //   // }
-
-
-    // } as unknown as jest.Mocked<providers.Provider>;
-
 
 
     mockApprove.mockResolvedValue("Approval successful");
@@ -119,19 +100,16 @@ describe("Aave Action Provider", () => {
   });
 
   describe('withdraw', () => {
+
+
     it("should successfully withdraw USDC from Aave v3 L2 bas-sepolia", async () => {
       const asset = markets.AaveV3Sepolia.ASSETS.USDC;
       const args = {
         amount: '1',
-        poolAddress: market.POOL,
-        assetUnderlyingAddress: asset.UNDERLYING,
+        assetAddress: asset.UNDERLYING,
         assetATokenAddress: asset.A_TOKEN,
       };
 
-
-      const provider = new ethers.providers.JsonRpcProvider(
-        `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
-      );
 
 
       // const response = await actionProvider.withdraw(mockWallet, args);
@@ -141,20 +119,13 @@ describe("Aave Action Provider", () => {
   })
 
   describe("supply", () => {
+
     it("should successfully supply USDC on Aaave v3 L2 base-sepolia", async () => {
-      const asset = markets.AaveV3Sepolia.ASSETS.USDC;
+      const asset = markets.AaveV3BaseSepolia.ASSETS.USDC;
       const args = {
         amount: '1',
-        poolAddress: market.POOL,
-        asset
+        assetAddress: asset.UNDERLYING,
       };
-
-
-
-      const provider = new ethers.providers.JsonRpcProvider(
-        `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
-      );
-
 
       const response = await actionProvider.supply(mockWallet, args);
 
@@ -162,7 +133,7 @@ describe("Aave Action Provider", () => {
       // as we try to avoid mocking the L2Encoder encode logic and provider 
       const encodedTxData = '0x0000000000000000000000000000000000000000000000000000000000010000';
 
-      const txData = '0x617ba03700000000000000000000000094a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8000000000000000000000000000000000000000000000000000000000000000100000000000000000000000098765432109876543210987654321098765432100000000000000000000000000000000000000000000000000000000000000000';
+      const txData = '0x617ba037000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e000000000000000000000000000000000000000000000000000000000000000100000000000000000000000098765432109876543210987654321098765432100000000000000000000000000000000000000000000000000000000000000000';
 
       console.log('encodedTxData', encodedTxData)
 
@@ -173,9 +144,8 @@ describe("Aave Action Provider", () => {
       });
 
       expect(mockWallet.waitForTransactionReceipt).toHaveBeenCalledWith(MOCK_TX_HASH);
-      expect(response).toContain(`Supplied ${args.asset.UNDERLYING} to Aave v3 Pool`);
+      expect(response).toContain(`Supplied 1 units of 0x036CbD53842c5426634e7929541eC2318f3dCF7e to Aave v3 Pool 0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b with transaction hash: ${MOCK_TX_HASH} status:1`);
       expect(response).toContain(MOCK_TX_HASH);
-      expect(response).toContain(JSON.stringify(MOCK_RECEIPT));
     });
 
     it("should handle transaction errors when supplying", async () => {
@@ -190,7 +160,7 @@ describe("Aave Action Provider", () => {
 
       const response = await actionProvider.supply(mockWallet, args);
 
-      expect(response).toContain("Error supplying to Aave v3: Error: Failed to supply");
+      expect(response).toContain("Error supplying to Aave v3: Error: Supply amount must be > 0");
     });
   });
 

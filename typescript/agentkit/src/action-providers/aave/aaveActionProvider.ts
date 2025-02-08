@@ -9,8 +9,10 @@ import { EvmWalletProvider, WalletProvider } from "../../wallet-providers";
 import { SupplySchema } from "./schemas";
 import { AAVEV3_BASE_SEPOLIA, AAVEV3_BASE_SEPOLIA_MARKET_CONFIG, AAVEV3_SEPOLIA, AAVEV3_SEPOLIA_MARKET_CONFIG, MarketConfig } from "./markets";
 import { AaveAsset, createSupplyTxData } from "./aaveActionUtil";
-import { Address, Hex, parseUnits } from "viem";
+import { Address, createPublicClient, Hex, http, parseUnits } from "viem";
 import { approve } from "../../utils";
+import { baseSepolia, sepolia } from "viem/chains";
+import { clientToProvider } from "./ethers-v5-adapter";
 
 export const SUPPORTED_NETWORKS = ["sepolia", "base-sepolia"];
 
@@ -41,38 +43,35 @@ export const findAaveMarketAssets = (networkId: string): {
 
 
 /**
- * Configuration options for the AaveActionProvider.
- * TODO extract provider for flexibility
- */
-export interface AaveActionProviderConfig {
-  /**
-   * Alchemy API Key
-   */
-  alchemyApiKey?: string;
-}
-
-/**
- * ERC20ActionProvider is an action provider for ERC20 tokens.
+ * AaveActionProvider is an action provider for supply and withdraw at Aave Protocol.
  */
 export class AaveActionProvider extends ActionProvider<WalletProvider> {
-  private readonly provider: providers.Provider;
+  #ethersProvider?: providers.Provider;
 
+  #publicClient;
   /**
-   * Constructor for the ERC20ActionProvider.
+   * Constructor for the AaveActionProvider.
    */
-  constructor(config: AaveActionProviderConfig) {
+  constructor() {
     super("aave", []);
 
-    config.alchemyApiKey ||= process.env.ALCHEMY_API_KEY;
-    if (!config.alchemyApiKey) {
-      throw new Error("ALCHEMY_API_KEY is not configured.");
+  }
+
+  private getEthersProvider(walletProvider: EvmWalletProvider) {
+    if (this.#ethersProvider) {
+      return this.#ethersProvider;
     }
+    const networkId = walletProvider.getNetwork().networkId || 'base-sepolia';
+    const chain = networkId === 'sepolia' ? sepolia : baseSepolia;
 
-    // TODO network agnostic
-    this.provider = new ethers.providers.JsonRpcProvider(
-      `https://base-sepolia.g.alchemy.com/v2/${config.alchemyApiKey}`
-    );
 
+    this.#publicClient = createPublicClient({
+      chain,
+      transport: http(),
+    });
+
+    this.#ethersProvider = clientToProvider(this.#publicClient);
+    return this.#ethersProvider;
   }
 
   async approveAll(walletProvider: EvmWalletProvider) {
@@ -89,10 +88,6 @@ export class AaveActionProvider extends ActionProvider<WalletProvider> {
 
   }
 
-  private getProvider(network: Network) {
-    // TODO
-    return this.provider;
-  }
 
   /**
    * Supply assets into a Aave v3 protocol
@@ -120,6 +115,7 @@ Important notes:
     args: z.infer<typeof SupplySchema>,
   ): Promise<string> {
     try {
+      console.log('suprise', args)
 
       if (args.amount === '0') {
         // TODO bigint > 0
@@ -129,7 +125,7 @@ Important notes:
       const { market, assets } = findAaveMarketAssets(networkId);
       const asset = assets?.[args.assetAddress] as AaveAsset;
 
-      console.log('aave supply', args, parseUnits(args.amount, 0),);
+      console.log('aave supply', args, parseUnits(args.amount, 0), networkId);
 
       console.log('asset', assets?.[args.assetAddress]);
 
@@ -137,7 +133,7 @@ Important notes:
 
       const user = await walletProvider.getAddress() as Address;
 
-      const { poolBundle, txData, encodedTxData } = await createSupplyTxData(this.provider, {
+      const { poolBundle, txData, encodedTxData } = await createSupplyTxData(this.getEthersProvider(walletProvider)!, {
         market,
         amount: parseUnits(args.amount, 0),
         user,
@@ -172,4 +168,4 @@ Important notes:
   supportsNetwork = (network: Network) => SUPPORTED_NETWORKS.includes(network.networkId!);
 }
 
-export const aaveActionProvider = (config: AaveActionProviderConfig) => new AaveActionProvider(config);
+export const aaveActionProvider = () => new AaveActionProvider();
