@@ -1,16 +1,17 @@
-import { createApprovePoolTxData, createSupplyTxData, createWithdrawTxData } from "./aaveActionUtil";
+import { AaveAsset, createApprovePoolTxData, createSupplyTxData, createWithdrawTxData, SupplyParams } from "./aaveActionUtil";
 
 import { ethers, Wallet } from 'ethers-v5';
 import { AAVEV3_BASE_SEPOLIA_MARKET_CONFIG, AAVEV3_SEPOLIA_MARKET_CONFIG } from "./markets";
 
 import * as markets from '@bgd-labs/aave-address-book';
 import { Address, encodeFunctionData, Hex, createWalletClient, http } from "viem";
-import { CdpWalletProvider, ViemWalletProvider } from "../../wallet-providers";
-import { ERC20Service } from "@aave/contract-helpers";
+import { CdpWalletProvider, EvmWalletProvider, ViemWalletProvider } from "../../wallet-providers";
+import { ERC20Service, Pool } from "@aave/contract-helpers";
 
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia, sepolia } from "viem/chains";
 import { approve } from "../../utils";
+import { createProvider } from "./ethers-v5-adapter";
 
 // Use aave Faucet to get assets on testnet
 // Sepolia https://app.aave.com/faucet/?marketName=proto_sepolia_v3
@@ -40,11 +41,59 @@ describe('aaveActionUtil', () => {
         apiKey: process.env.ALCHEMY_API_KEY
     };
 
-    // TODO extract supply/withdraw flow
+
+    const supplyAndWithdraw = async (
+        evmWalletProvider: EvmWalletProvider,
+        provider: ethers.providers.Provider,
+        params: SupplyParams,
+        expectedSupplyTo: Address
+    ) => {
+        const { user, amount, asset, market } = params;
+
+        console.log('USER', user, 'supply to pool', market.POOL, amount);
+
+        const { txData } = await createSupplyTxData(provider, {
+            market,
+            amount,
+            user,
+            asset,
+        });
+
+        expect(txData.from).toEqual(user);
+        expect(txData.to).toEqual(expectedSupplyTo);
+
+
+
+        const txhash = await evmWalletProvider.sendTransaction({
+            ...txData,
+        })
+        console.log('results', txhash)
+
+        const { withDrawTxDatas } = await createWithdrawTxData(provider, {
+            market,
+            amount,
+            user,
+            asset
+        });
+
+
+        expect(withDrawTxDatas?.[0].to).toEqual(market.POOL);
+
+        // use utilties with ethers-v5 provider to encode, while send txn with viem
+        const withdrawTxHash = await evmWalletProvider.sendTransaction({
+            to: withDrawTxDatas?.[0].to as Address,
+            data: withDrawTxDatas?.[0].data as Hex,
+
+        })
+
+        await evmWalletProvider.waitForTransactionReceipt(withdrawTxHash);
+
+        console.log('withdraw txn hash', withdrawTxHash)
+    }
+
     describe('L1 sepolia with native wallet', () => {
-        const provider = new ethers.providers.JsonRpcProvider(
-            `https://eth-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
-        );
+
+        const provider = createProvider('sepolia');
         const market = AAVEV3_SEPOLIA_MARKET_CONFIG;
 
         const client = createWalletClient({
@@ -61,51 +110,14 @@ describe('aaveActionUtil', () => {
             await approve(evmWalletProvider, markets.AaveV3Sepolia.ASSETS.USDC.UNDERLYING, market.POOL, ALLOWANCE_DEFAULT);
         })
 
+
         test('supply and withdraw USDC work with native wallet', async () => {
 
             const asset = markets.AaveV3Sepolia.ASSETS.USDC
 
             const amount = 1n;
 
-            console.log('USER', user, 'supply to pool', market.POOL, amount);
-
-            // TODO segregation integration test with mocks
-            const { txData } = await createSupplyTxData(provider, {
-                market,
-                amount,
-                user,
-                asset,
-            });
-
-            expect(txData.from).toEqual(user);
-            expect(txData.to).toEqual(market.POOL);
-
-            const txhash = await evmWalletProvider.sendTransaction({
-                ...txData,
-            })
-            console.log('results', txhash)
-
-
-            const { withDrawTxDatas } = await createWithdrawTxData(provider, {
-                market,
-                amount,
-                user,
-                asset
-            });
-
-
-            expect(withDrawTxDatas?.[0].to).toEqual(market.POOL);
-
-            // use utilties with ethers-v5 provider to encode, while send txn with viem
-            const withdrawTxHash = await evmWalletProvider.sendTransaction({
-                to: withDrawTxDatas?.[0].to as Address,
-                data: withDrawTxDatas?.[0].data as Hex,
-
-            })
-
-            await evmWalletProvider.waitForTransactionReceipt(withdrawTxHash);
-
-            console.log('withdraw txn hash', withdrawTxHash)
+            await supplyAndWithdraw(evmWalletProvider, provider, { user, amount, market, asset }, market.POOL);
         });
 
         test('supply and withdraw ETH work with native wallet', async () => {
@@ -116,48 +128,9 @@ describe('aaveActionUtil', () => {
                 A_TOKEN: markets.AaveV3Sepolia.ASSETS.WETH.A_TOKEN as Address
             }
 
-            const amount = 1n;
-
-            // TODO segregation integration test with mocks
-            const { txData } = await createSupplyTxData(provider, {
-                market,
-                amount,
-                user,
-                asset
-            });
-
-            expect(txData.from).toEqual(user);
-            expect(txData.to).toEqual(market.WETH_GATEWAY);
-
-            // works only when explicitly specify 
-            const txhash = await evmWalletProvider.sendTransaction({
-                ...txData,
-            })
-
-            console.log('results', txhash)
-
-            // TODO fix withdraw at ethers arithmetic error
-
-            // const { withDrawTxDatas } = await createWithdrawTxData(provider, {
-            //     market,
-            //     amount,
-            //     user,
-            //     asset
-            // });
+            await supplyAndWithdraw(evmWalletProvider, provider, { user, amount: 1n, market, asset }, market.WETH_GATEWAY);
 
 
-            // expect(withDrawTxDatas?.[0].to).toEqual(market.WETH_GATEWAY);
-
-            // // use utilties with ethers-v5 provider to encode, while send txn with viem
-            // const withdrawTxHash = await evmWalletProvider.sendTransaction({
-            //     to: withDrawTxDatas?.[0].to as Address,
-            //     data: withDrawTxDatas?.[0].data as Hex,
-
-            // })
-
-            // await evmWalletProvider.waitForTransactionReceipt(withdrawTxHash);
-
-            // console.log('withdraw txn hash', withdrawTxHash)
         });
 
 
@@ -171,15 +144,15 @@ describe('aaveActionUtil', () => {
         ['cdp']
     ])('L2 base sepolia with evm provider %s', (walletType) => {
         let evmWalletProvider;
-        const provider = new ethers.providers.JsonRpcProvider(
-            `https://base-sepolia.g.alchemy.com/v2/${alchemyConfig.apiKey}`
-        );
 
+        const provider = createProvider('base-sepolia');
         const client = createWalletClient({
             account,
             chain: baseSepolia,
             transport: http(),
         });
+
+
         beforeEach(async () => {
             if (walletType === 'cdp') {
                 evmWalletProvider = await CdpWalletProvider.configureWithWallet({
@@ -188,34 +161,8 @@ describe('aaveActionUtil', () => {
                 });
             }
 
+
             evmWalletProvider = new ViemWalletProvider(client);
-            // const { erc20Service, txData: approvalTxData } = await createApprovePoolTxData(provider, {
-            //     market,
-            //     amount: ALLOWANCE_DEFAULT,
-            //     USER,
-            //     ASSET
-            // });
-
-            // await wallet.sendTransaction({
-            //     ...approvalTxData
-            // });
-
-
-            // Approve for allowance
-            // const { erc20Service, txData: approvalTxData } = await createApprovePoolTxData(provider, {
-            //     market,
-            //     amount: ALLOWANCE_DEFAULT,
-            //     USER,
-            //     TOKEN
-            // });
-
-            // await cdpWalletProvider.sendTransaction({
-            //     to: TOKEN as Address,
-            //     from: USER as Address,
-            //     data: approvalTxData.data as Hex
-            // });
-
-
 
         })
 
@@ -225,56 +172,11 @@ describe('aaveActionUtil', () => {
 
 
         test('supply and withdraw work with USDC', async () => {
-            // 0x4A9b1ECD1297493B4EfF34652710BD1cE52c6526
-            const privateKey = process.env.PRIVATE_KEY || '';
 
             const user = evmWalletProvider.getAddress() as Address;
+            const amount = 1n;
 
-
-            const amount = (1e6 / 100).toString();
-            console.log('USER', user, 'supply to pool', market.POOL, amount);
-
-
-            // TODO segregation integration test with mocks
-            const { poolBundle, txData } = await createSupplyTxData(provider, {
-                market,
-                amount: 1n,
-                user,
-                asset
-            });
-
-
-            const supplyTxhash = await evmWalletProvider.sendTransaction({
-                ...txData,
-                gasLimit: 21000000,
-            });
-
-            await evmWalletProvider.waitForTransactionReceipt(supplyTxhash);
-
-
-            console.log('supply txn hash', supplyTxhash)
-
-            // estimateGas error if withdraw amount incorrect
-            // TODO this amount to be parsed as wei
-            const { withDrawTxDatas } = await createWithdrawTxData(provider, {
-                market,
-                amount: 1n,
-                user,
-                asset
-            });
-
-            // use utilties with ethers-v5 provider to encode, while send txn with viem
-            const withdrawTxHash = await evmWalletProvider.sendTransaction({
-                to: withDrawTxDatas?.[0].to as Address,
-                data: withDrawTxDatas?.[0].data as Hex,
-
-            })
-
-
-            console.log('withdraw txn hash', withdrawTxHash)
-            expect(withdrawTxHash).toBeDefined();
-
-            await evmWalletProvider.waitForTransactionReceipt(withdrawTxHash);
+            await supplyAndWithdraw(evmWalletProvider, provider, { user, amount, market, asset }, market.POOL);
 
 
         })

@@ -41,9 +41,9 @@ export const WithdrawSchema = z
 
     assetAddress: z.string()
       .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format")
-      .describe("The contract address of the underlying token of asset to supply"),
+      .describe("The contract address of the underlying token of asset to withdraw"),
 
 
   })
   .strip()
-  .describe("Instructions for transferring assets");
+  .describe("Instructions for withdrawing assets");

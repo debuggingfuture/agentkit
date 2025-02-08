@@ -1,5 +1,6 @@
 import { providers } from 'ethers-v5'
-import type { Chain, Client, Transport } from 'viem'
+import { createPublicClient, http, type Chain, type Client, type Transport } from 'viem'
+import { baseSepolia, sepolia } from 'viem/chains'
 
 export function clientToProvider(client: Client<Transport, Chain>) {
     const { chain, transport } = client
@@ -15,5 +16,19 @@ export function clientToProvider(client: Client<Transport, Chain>) {
             ),
         )
     return new providers.JsonRpcProvider(transport.url, network)
+}
+
+export const createProvider = (networkId: string) => {
+
+    const chain = networkId === 'sepolia' ? sepolia : baseSepolia;
+    const transport = http();
+
+    const publicClient = createPublicClient({
+        chain,
+        transport,
+    });
+
+    return clientToProvider(publicClient);
+
 }
 
