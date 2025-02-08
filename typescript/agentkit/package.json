@@ -44,7 +44,11 @@
     "reflect-metadata": "^0.2.2",
     "twitter-api-v2": "^1.18.2",
     "viem": "^2.22.16",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@aave/contract-helpers": "^1.31.1",
+    "@aave/math-utils": "^1.31.1",
+    "ethers-v5": "npm:ethers@5.7.2",
+    "@bgd-labs/aave-address-book": "^4.9.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

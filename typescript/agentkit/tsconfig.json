@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "ethers-v5": ["../../node_modules/ethers-v5"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests"]

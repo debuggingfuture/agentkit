@@ -244,7 +244,6 @@ export class CdpWalletProvider extends EvmWalletProvider {
     const signedPayload = await this.addSignatureAndSerialize(preparedTransaction, signature);
 
     const externalAddress = new ExternalAddress(this.#cdpWallet.getNetworkId(), this.#address!);
-
     const tx = await externalAddress.broadcastExternalTransaction(signedPayload.slice(2));
 
     return tx.transactionHash as `0x${string}`;
@@ -266,7 +265,6 @@ export class CdpWalletProvider extends EvmWalletProvider {
     if (!this.#cdpWallet) {
       throw new Error("Wallet not initialized");
     }
-
     const nonce = await this.#publicClient!.getTransactionCount({
       address: this.#address! as `0x${string}`,
     });
