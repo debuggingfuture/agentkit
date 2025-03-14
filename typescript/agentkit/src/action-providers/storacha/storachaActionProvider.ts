@@ -49,7 +49,7 @@ export class StorachaActionProvider extends ActionProvider {
         }
 
         if (!config.proof) {
-            throw new Error("STORACHA_PRIVATE_KEY is not configured.");
+            throw new Error("STORACHA_PROOF is not configured.");
         }
         this.config = config;
 
